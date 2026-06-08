@@ -76,7 +76,7 @@ class GurobiMICPSolver(STLSolver):
             obstacle_adjustments=None, objects=None):
         assert M > 0, "M should be a (large) positive scalar"
         super().__init__(spec, sys, x0, T, verbose)
-
+    
         self.M = float(M)
         self.presolve = presolve
         self.rho_min = rho_min
@@ -161,7 +161,7 @@ class GurobiMICPSolver(STLSolver):
         for t in range(1,self.T):
             self.cost += self.x[:,t]@Q@self.x[:,t] + self.u[:,t]@R@self.u[:,t]
 
-        print(type(self.cost))
+        # print(type(self.cost))
     
     def AddRobustnessCost(self):
         """
@@ -302,6 +302,8 @@ class GurobiMICPSolver(STLSolver):
                  - rho_time_series: Local robustness at each timestep (array of length T)
                  - total_runtime: Total solve time in seconds (Phase 1 + Phase 2)
         """
+
+        # print(f"[Solve debug] self.T={self.T}, self.sys.n={self.sys.n}, self.x shape={self.x.shape}")
         
         # ===== PHASE 1: Maximize global robustness =====
         if self.verbose:
@@ -314,10 +316,12 @@ class GurobiMICPSolver(STLSolver):
         
         # Solve Phase 1
         self.model.optimize()
-        
+        # print(f"[Phase 1] Runtime: {self.model.Runtime:.4f}s, Status: {self.model.status}")
+
         if self.model.status != GRB.OPTIMAL:
             if self.verbose:
-                print(f"\nPhase 1 optimization failed with status {self.model.status}.\n")
+                # print(f"\nPhase 1 optimization failed with status {self.model.status}.\n")
+                pass
             return (None, None, -np.inf, None, self.model.Runtime)
         
         # Get Phase 1 results
@@ -325,15 +329,17 @@ class GurobiMICPSolver(STLSolver):
         phase1_runtime = self.model.Runtime
         
         if self.verbose:
-            print(f"\nPhase 1 Complete!")
-            print(f"  Solve time: {phase1_runtime:.4f} seconds")
-            print(f"  Optimal global robustness: {rho_global_phase1:.4f}")
+            pass
+            # print(f"\nPhase 1 Complete!")
+            # print(f"  Solve time: {phase1_runtime:.4f} seconds")
+            # print(f"  Optimal global robustness: {rho_global_phase1:.4f}")
         
         # ===== PHASE 2: Maximize sum of local robustness =====
         if self.verbose:
-            print("\n" + "="*70)
-            print("PHASE 2: Maximizing Local Robustness (Deterministic Selection)")
-            print("="*70)
+            pass
+            # print("\n" + "="*70)
+            # print("PHASE 2: Maximizing Local Robustness (Deterministic Selection)")
+            # print("="*70)
         
         # Fix global robustness to Phase 1 optimal value
         rho_fix_constraint = self.model.addConstr(
@@ -359,7 +365,11 @@ class GurobiMICPSolver(STLSolver):
         self.model.setObjective(phase2_cost, GRB.MINIMIZE)
 
         # Solve Phase 2
+        # self.model.setParam('TimeLimit', 5)
         self.model.optimize()
+        phase2_runtime = self.model.Runtime
+
+        # print(f"[Phase 2] Runtime: {phase2_runtime:.4f}s, Status: {self.model.status}")
         
         if self.model.status != GRB.OPTIMAL:
             if self.verbose:
@@ -375,16 +385,17 @@ class GurobiMICPSolver(STLSolver):
             u = self.u.X
             rho = self.rho.X[0]
             rho_time_series = self.rho_local.X
+
             
-            return (x, u, rho, rho_time_series, phase1_runtime)
+            return (x, u, rho, rho_time_series, phase2_runtime)
         
         # Get final results from Phase 2
         x = self.x.X
         u = self.u.X
         rho = self.rho.X[0]
         rho_time_series = self.rho_local.X
-        phase2_runtime = self.model.Runtime
         total_runtime = phase1_runtime + phase2_runtime
+        # print(f"[Solve] x.shape={x.shape}, u.shape={u.shape}")
         
         return (x, u, rho, rho_time_series, total_runtime)
 
